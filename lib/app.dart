@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'screens/settings_screen.dart';
 import 'screens/store_screen.dart';
 import 'screens/vibe_screen.dart';
+import 'services/ai_profile_store.dart';
 import 'services/app_catalog.dart';
 import 'services/llm_service.dart';
 import 'services/local_server.dart';
@@ -14,6 +15,7 @@ class GoodVibesApp extends StatelessWidget {
   final AppCatalog catalog;
   final LocalServer server;
   final LlmService llm;
+  final AiProfileStore profileStore;
 
   const GoodVibesApp({
     super.key,
@@ -21,6 +23,7 @@ class GoodVibesApp extends StatelessWidget {
     required this.catalog,
     required this.server,
     required this.llm,
+    required this.profileStore,
   });
 
   @override
@@ -48,6 +51,7 @@ class GoodVibesApp extends StatelessWidget {
         catalog: catalog,
         server: server,
         llm: llm,
+        profileStore: profileStore,
       ),
     );
   }
@@ -58,12 +62,14 @@ class _HomeShell extends StatefulWidget {
   final AppCatalog catalog;
   final LocalServer server;
   final LlmService llm;
+  final AiProfileStore profileStore;
 
   const _HomeShell({
     required this.settings,
     required this.catalog,
     required this.server,
     required this.llm,
+    required this.profileStore,
   });
 
   @override
@@ -73,11 +79,15 @@ class _HomeShell extends StatefulWidget {
 class _HomeShellState extends State<_HomeShell> {
   int _index = 0;
   String? _editTargetId;
+  bool _loadEditTranscript = true;
+  String? _editDraft;
+  int _editRequestSerial = 0;
 
   @override
   Widget build(BuildContext context) {
-    final editTarget =
-        _editTargetId == null ? null : widget.catalog.byId(_editTargetId!);
+    final editTarget = _editTargetId == null
+        ? null
+        : widget.catalog.byId(_editTargetId!);
     return Scaffold(
       body: IndexedStack(
         index: _index,
@@ -86,8 +96,19 @@ class _HomeShellState extends State<_HomeShell> {
             catalog: widget.catalog,
             server: widget.server,
             settings: widget.settings,
-            onEdit: (app) => setState(() {
-              _editTargetId = app.manifest.id;
+            onEdit: (app, {required loadTranscript, String? initialDraft}) =>
+                setState(() {
+                  _editTargetId = app.manifest.id;
+                  _loadEditTranscript = loadTranscript;
+                  _editDraft = initialDraft;
+                  _editRequestSerial += 1;
+                  _index = 1;
+                }),
+            onNewApp: () => setState(() {
+              _editTargetId = null;
+              _loadEditTranscript = true;
+              _editDraft = null;
+              _editRequestSerial += 1;
               _index = 1;
             }),
           ),
@@ -97,10 +118,20 @@ class _HomeShellState extends State<_HomeShell> {
             settings: widget.settings,
             server: widget.server,
             editTarget: editTarget,
-            onEditTargetChanged: (app) =>
-                setState(() => _editTargetId = app?.manifest.id),
+            loadTranscript: _loadEditTranscript,
+            initialDraft: _editDraft,
+            editRequestSerial: _editRequestSerial,
+            onInitialDraftConsumed: () => setState(() => _editDraft = null),
+            onEditTargetChanged: (app) => setState(() {
+              _editTargetId = app?.manifest.id;
+              _loadEditTranscript = true;
+            }),
           ),
-          SettingsScreen(settings: widget.settings, llm: widget.llm),
+          SettingsScreen(
+            settings: widget.settings,
+            llm: widget.llm,
+            profileStore: widget.profileStore,
+          ),
         ],
       ),
       bottomNavigationBar: NavigationBar(
